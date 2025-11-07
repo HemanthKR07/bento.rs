@@ -1,6 +1,8 @@
 // crates/libbento/src/process.rs
 
 use crate::fs;
+use std::io::Read;
+use crate::overlayfs;
 use crate::syscalls::{
     disable_setgroups_for_child, fork_intermediate, map_user_namespace_rootless,
     unshare_remaining_namespaces, unshare_user_namespace,
@@ -121,6 +123,7 @@ pub struct Config {
     pub bundle_path: String,
     pub container_id: String,
     pub population_method: RootfsPopulationMethod, // NEW: Add this field
+    pub use_overlayfs: bool,
 }
 
 impl Default for Config {
@@ -184,7 +187,8 @@ args: vec!["/bin/sh".to_string(), "-c".to_string(),
             rootless: true,
             bundle_path: ".".to_string(),
             container_id: "default".to_string(),
-            population_method: RootfsPopulationMethod::BusyBox, // NEW: Default to reliable method
+            population_method: RootfsPopulationMethod::Manual,// NEW: Default to reliable method
+            use_overlayfs: false,
         }
     }
 }
@@ -566,7 +570,16 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
         return 1;
     }
 
-    // Phase 4: Enter PAUSE state
+    // Phase 4: Setup overlayfs, if select.
+    if config.use_overlayfs {
+        if let Err(e) = overlayfs::build_overlayfs(&config.container_id) {
+            println!("Container id : {}", &config.container_id);
+            eprintln!("[INIT] Failed to setup optional overlayfs : {}",e);
+            return 1;
+        }
+    }
+  
+    // Phase 5: Enter PAUSE state
     let start_pipe_path = format!("/tmp/bento-start-{}", config.container_id);
     println!("[Init] Container setup complete - entering PAUSE state");
     println!("[Init] Waiting for signal at: {}", start_pipe_path);
@@ -587,7 +600,7 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
         }
     }
 
-    // Phase 5: Execute user command with extensive debugging
+    // Phase 6: Execute user command with extensive debugging
     println!("[Init] About to execute command: {:?}", config.args);
     println!(
         "[Init] Current working directory before exec: {:?}",
@@ -611,7 +624,6 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
 
 // Enhanced start signal reading with complete I/O handling
 fn read_start_signal(pipe_path: &str) -> Result<()> {
-    use std::io::Read;
 
     println!("[Init] Opening start pipe: {}", pipe_path);
 

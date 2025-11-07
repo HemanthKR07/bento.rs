@@ -1,0 +1,16 @@
+bento list
+bento create --bundle test-bundle test-container
+bento list
+bento create --bundle test-bundle test2
+bento create --bundle test-bundle test3
+bento list
+bento start test-container
+bento start test-container
+bento list
+
+
+just replace bento with cargo run --
+
+
+cargo fmt --all -- --check
+cargo clippy

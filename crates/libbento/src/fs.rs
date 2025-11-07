@@ -18,6 +18,7 @@ fn get_rootfs(container_id: &str) -> Result<(PathBuf, PathBuf)> {
     let home = std::env::var("HOME")?;
     let rootfs = PathBuf::from(format!("{home}/.local/share/bento/{container_id}/rootfs"));
 
+    println!("rootfs : {}", rootfs.display());
     fs::create_dir_all(&rootfs).context("Failed to create the rootfs directory.")?;
 
     let old_root = rootfs.join("old_root");
@@ -364,35 +365,30 @@ fn rootless_mount_proc(rootfs: &Path) -> Result<()> {
     }
 }
 
-fn rootless_mount_sys(rootfs: &Path) -> Result<()> {
-    mount_sys_progressive(rootfs)
-}
 
-fn mount_sys_progressive(rootfs: &Path) -> Result<()> {
+// ********************************************************************88
+
+fn rootless_mount_sys(rootfs: &Path) -> Result<()> {
     let sys_path = rootfs.join("sys");
     fs::create_dir_all(&sys_path)?;
 
-    println!("[Mount] Setting up /sys with progressive security strategy");
+    println!("[Init] Setting up /sys");
 
     // Strategy 1: Try real sysfs mount (ideal but often fails in rootless)
-    if attempt_real_sysfs_mount(&sys_path).is_ok() {
-        println!("[Mount] Real sysfs mounted successfully");
+    if mount_sysfs(&sys_path).is_ok() {
+        println!("[Init] Sysfs mounted successfully");
         return Ok(());
     }
 
-    // Strategy 2: Mount tmpfs and populate with essential fake files
-    if mount_tmpfs_sys_with_content(&sys_path).is_ok() {
-        println!("[Mount] /sys mounted as populated tmpfs (secure isolation)");
-        return Ok(());
+    // Here we are trying to bind mount host /sysfs
+    if bind_mount_host_sys(&sys_path).is_err() {
+        println!("[Init] Bind mounted host's /sys successfully");
     }
-
-    // Strategy 3: Fallback to directory structure with fake files
-    create_populated_sys_directories(&sys_path)?;
-    println!("[Mount] Created populated /sys directory structure (fallback)");
     Ok(())
 }
 
-fn attempt_real_sysfs_mount(sys_path: &Path) -> Result<()> {
+// This func to mount sys dir
+fn mount_sysfs(sys_path: &Path) -> Result<()> {
     mount(
         Some("sysfs"),
         sys_path,
@@ -403,137 +399,33 @@ fn attempt_real_sysfs_mount(sys_path: &Path) -> Result<()> {
     .context("Real sysfs mount failed")
 }
 
-fn mount_tmpfs_sys_with_content(sys_path: &Path) -> Result<()> {
-    // Mount read-only tmpfs
-    mount(
-        Some("tmpfs"),
-        sys_path,
-        Some("tmpfs"),
-        MsFlags::MS_RDONLY | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
-        Some("size=2M,mode=755"), // 2MB should be plenty
-    )
-    .context("Failed to mount tmpfs for /sys")?;
+// Bind mounting host's /sys
+fn bind_mount_host_sys(sys_path: &Path) -> Result<()> {
+    println!("[Init] Attempting bind mount of host /sys");
 
-    // Temporarily remount as writable to populate, then make read-only
-    mount(
-        None::<&str>,
+    match mount(
+        Some("/sys"),
         sys_path,
         None::<&str>,
-        MsFlags::MS_REMOUNT | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
-        Some("size=2M,mode=755"),
-    )?;
-
-    // Populate with essential content
-    populate_tmpfs_sys_content(sys_path)?;
-
-    // Make read-only again
-    mount(
+        MsFlags::MS_BIND | MsFlags::MS_REC,
         None::<&str>,
-        sys_path,
-        None::<&str>,
-        MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
-        Some("size=2M,mode=755"),
-    )?;
-
-    Ok(())
-}
-
-fn populate_tmpfs_sys_content(sys_path: &Path) -> Result<()> {
-    // Essential directories that applications expect
-    let essential_dirs = [
-        "kernel",
-        "fs",
-        "class",
-        "devices",
-        "bus",
-        "firmware",
-        "class/net",
-        "class/block",
-        "class/tty",
-    ];
-
-    for dir in &essential_dirs {
-        fs::create_dir_all(sys_path.join(dir))?;
-    }
-
-    // Essential files with realistic fake content
-    let essential_files = [
-        ("kernel/version", "5.15.0-container #1 SMP Container Kernel"),
-        ("kernel/osrelease", "5.15.0-container"),
-        ("kernel/hostname", "container"),
-        (
-            "fs/cgroup/memory/memory.limit_in_bytes",
-            "9223372036854775807",
-        ),
-        ("fs/cgroup/memory/memory.usage_in_bytes", "134217728"),
-        ("class/net/lo/operstate", "up"),
-        ("devices/system/cpu/online", "0-3"),
-    ];
-
-    for (file_path, content) in &essential_files {
-        let full_path = sys_path.join(file_path);
-
-        // Create parent directories if needed
-        if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)?;
+    ) {
+        Ok(_) => {
+            println!("[Init] Bind mount of host /sys successfully");
+            Ok(())
         }
-
-        fs::write(&full_path, content)?;
-    }
-
-    println!("[Mount] Populated tmpfs /sys with essential fake files");
-    Ok(())
-}
-
-fn create_populated_sys_directories(sys_path: &Path) -> Result<()> {
-    // Same structure as tmpfs but on regular filesystem
-    let essential_dirs = [
-        "kernel",
-        "fs",
-        "class",
-        "devices",
-        "bus",
-        "firmware",
-        "class/net",
-        "class/block",
-        "class/tty",
-    ];
-
-    for dir in &essential_dirs {
-        fs::create_dir_all(sys_path.join(dir))?;
-    }
-
-    // Create the same fake files as in tmpfs version
-    let essential_files = [
-        ("kernel/version", "5.15.0-container #1 SMP Container Kernel"),
-        ("kernel/osrelease", "5.15.0-container"),
-        ("kernel/hostname", "container"),
-        (
-            "fs/cgroup/memory/memory.limit_in_bytes",
-            "9223372036854775807",
-        ),
-        ("class/net/lo/operstate", "up"),
-    ];
-
-    for (file_path, content) in &essential_files {
-        let full_path = sys_path.join(file_path);
-
-        if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)?;
+        Err(e) => {
+            println!("[Init] Bind mount of /sys failed: {e}");
+            Err(e.into())
         }
-
-        fs::write(&full_path, content)?;
     }
-
-    println!("[Mount] Created populated /sys directory structure with fake files");
-    Ok(())
 }
 
 fn rootless_mount_dev(rootfs: &Path) -> Result<()> {
     let dev_path = rootfs.join("dev");
     fs::create_dir_all(&dev_path)?;
 
-    println!("[Mount] Setting up /dev for rootless container");
+    println!("[Init] Setting up /dev for rootless container");
 
     // Strategy 1: Bind mount host /dev (most compatible)
     if try_bind_mount_host_dev(&dev_path).is_ok() {
@@ -550,19 +442,18 @@ fn rootless_mount_dev(rootfs: &Path) -> Result<()> {
     )
     .context("Failed to mount tmpfs for /dev")?;
 
-    match create_device_nodes_if_possible(&dev_path) {
-        Ok(_) => println!("[Mount] Successfully created device nodes"),
+    match create_device_nodes(&dev_path) {
+        Ok(_) => println!("[Init] Successfully created device nodes"),
         Err(_) => {
-            println!("[Mount] Device node creation failed (expected in rootless)");
+            println!("[Init] Device node creation failed (expected in rootless)");
             create_rootless_dev_structure(&dev_path)?;
         }
     }
-
     Ok(())
 }
 
 fn try_bind_mount_host_dev(dev_path: &Path) -> Result<()> {
-    println!("[Mount] Attempting bind mount of host /dev");
+    println!("[Init] Attempting bind mount of host /dev");
 
     match mount(
         Some("/dev"),
@@ -572,17 +463,17 @@ fn try_bind_mount_host_dev(dev_path: &Path) -> Result<()> {
         None::<&str>,
     ) {
         Ok(_) => {
-            println!("[Mount] Successfully bind mounted host /dev (ideal solution)");
+            println!("[Init] Successfully bind mounted host /dev (ideal solution)");
             Ok(())
         }
         Err(e) => {
-            println!("[Mount] Bind mount of /dev failed: {e}");
+            println!("[Init] Bind mount of /dev failed: {e}");
             Err(e.into())
         }
     }
 }
 
-fn create_device_nodes_if_possible(dev_path: &Path) -> Result<()> {
+fn create_device_nodes(dev_path: &Path) -> Result<()> {
     let essential_devices = [
         ("null", 1u32, 3u32, 0o666),
         ("zero", 1u32, 5u32, 0o666),
@@ -605,14 +496,14 @@ fn create_device_nodes_if_possible(dev_path: &Path) -> Result<()> {
 }
 
 fn create_rootless_dev_structure(dev_path: &Path) -> Result<()> {
-    println!("[Mount] Creating rootless-compatible /dev structure");
+    println!("[Init] Creating rootless-compatible /dev structure");
 
     let dirs = ["pts", "shm", "mqueue"];
     for dir in &dirs {
         fs::create_dir_all(dev_path.join(dir))?;
     }
 
-    let fake_devices = [
+    let _devices = [
         ("null", ""),
         ("zero", ""),
         ("urandom", "random data placeholder"),
@@ -620,7 +511,7 @@ fn create_rootless_dev_structure(dev_path: &Path) -> Result<()> {
         ("tty", ""),
     ];
 
-    for (name, content) in &fake_devices {
+    for (name, content) in &_devices {
         let device_path = dev_path.join(name);
         fs::write(&device_path, content)
             .with_context(|| format!("Failed to create placeholder {name}"))?;
@@ -654,6 +545,7 @@ fn create_dev_symlinks(dev_path: &Path) -> Result<()> {
     Ok(())
 }
 
+
 fn create_minimal_proc_structure(proc_path: &Path) -> Result<()> {
     let dirs = ["self", "sys", "net"];
     for dir in &dirs {
@@ -665,7 +557,7 @@ fn create_minimal_proc_structure(proc_path: &Path) -> Result<()> {
 
     Ok(())
 }
-
+/*
 fn cleanup_old_root() -> Result<()> {
     println!("[Init] Cleaning up old root");
 
@@ -679,6 +571,27 @@ fn cleanup_old_root() -> Result<()> {
         Err(e) => println!("[Init] Warning: Failed to remove old root: {e}"),
     }
 
+    Ok(())
+}
+*/
+
+fn cleanup_old_root() -> Result<()> {
+    println!("[Init] Cleaning up old root");
+
+    match umount2("/old_root", MntFlags::MNT_DETACH) {
+        Ok(_) => println!("[Init] Old root unmounted"),
+        Err(e) => {
+            println!("[Init] Warning: Failed to unmount old root: {e}");
+            if let Err(new) = umount2("/old_root", MntFlags::MNT_DETACH | MntFlags::MNT_FORCE) {
+                return Err(new).context("Failed to unmount old root : {new}");
+            } else {
+                match fs::remove_dir_all("/old_root") {
+                    Ok(_) => println!("[Init] Old root directory removed"),
+                    Err(e) => println!("[Init] Warning: Failed to remove old root: {e}"),
+                }
+            }
+        }
+    }
     Ok(())
 }
 

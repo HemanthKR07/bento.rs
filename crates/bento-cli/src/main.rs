@@ -1,5 +1,3 @@
-// crates/bento-cli/src/main.rs
-
 use clap::{Parser, Subcommand, ValueHint};
 use libbento::process::{Config, RootfsPopulationMethod, create_container, start_container};
 use log::info;
@@ -24,10 +22,13 @@ pub enum Commands {
         /// Rootfs population method: 'busybox' for static binary or 'manual' for host binary copying
         #[arg(
             long,
-            default_value = "busybox",
+            //default_value = "busybox",
+            default_value = "manual",
             help = "Method to populate container rootfs: 'busybox' or 'manual'"
         )]
         population_method: String,
+        #[arg(long, default_value_t = false)]
+        overlayfs: bool,
     },
     Start {
         #[arg(required = true)]
@@ -60,13 +61,15 @@ fn main() {
         Commands::Create {
             container_id,
             bundle,
-            population_method, // Add this parameter
+            population_method,// Add this parameter
+            overlayfs,
         } => {
             println!(
-                "Creating container '{}' with bundle '{}' using {} method",
+                "Creating container '{}' with bundle '{}' using {} method{}",
                 container_id,
                 bundle.display(),
-                population_method
+                population_method,
+                if overlayfs {" with optional Overlayfs."} else {"."}
             );
 
             let config = Config {
@@ -76,6 +79,7 @@ fn main() {
                     "manual" => RootfsPopulationMethod::Manual,
                     _ => RootfsPopulationMethod::BusyBox, // Clear default handling
                 },
+                use_overlayfs: overlayfs,
                 ..Config::default() // Use default for remaining fields
             };
             match create_container(&config) {
