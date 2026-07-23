@@ -1,6 +1,6 @@
 // crates/libbento/src/process.rs
-
 use crate::fs;
+#[allow(dead_code)]
 use crate::overlayfs;
 use crate::syscalls::{
     disable_setgroups_for_child, fork_intermediate, map_user_namespace_rootless,
@@ -138,6 +138,7 @@ impl Default for SeccompConfig {
 }
 
 // this holds the configurations from seccompConfig, which defines the filtering rules.
+#[allow(dead_code)]
 pub struct SeccompFilter {
     config: SeccompConfig,
 }
@@ -614,12 +615,12 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
     }
 
     // Phase 4: Setup overlayfs, if select.
-    if config.use_overlayfs {
-        if let Err(e) = overlayfs::build_overlayfs(&config.container_id) {
-            println!("Container id : {}", &config.container_id);
-            eprintln!("[INIT] Failed to setup optional overlayfs : {}", e);
-            return 1;
-        }
+    if config.use_overlayfs
+        && let Err(e) = overlayfs::build_overlayfs(&config.container_id)
+    {
+        println!("Container id : {}", config.container_id);
+        eprintln!("[INIT] Failed to setup optional overlayfs: {}", e);
+        return 1;
     }
 
     // Phase 5: Enter PAUSE state
