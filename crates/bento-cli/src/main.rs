@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand, ValueHint};
-use libbento::process::{Config, RootfsPopulationMethod, create_container, start_container, SeccompConfig};
+use libbento::process::{
+    Config, RootfsPopulationMethod, SeccompConfig, create_container, start_container,
+};
 use log::info;
 use std::path::PathBuf;
 
@@ -61,7 +63,7 @@ fn main() {
         Commands::Create {
             container_id,
             bundle,
-            population_method,// Add this parameter
+            population_method, // Add this parameter
             overlayfs,
         } => {
             println!(
@@ -69,7 +71,11 @@ fn main() {
                 container_id,
                 bundle.display(),
                 population_method,
-                if overlayfs {" with optional Overlayfs."} else {"."}
+                if overlayfs {
+                    " with optional Overlayfs."
+                } else {
+                    "."
+                }
             );
 
             let config = Config {

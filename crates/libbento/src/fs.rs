@@ -365,7 +365,6 @@ fn rootless_mount_proc(rootfs: &Path) -> Result<()> {
     }
 }
 
-
 // ********************************************************************88
 
 fn rootless_mount_sys(rootfs: &Path) -> Result<()> {
@@ -545,7 +544,6 @@ fn create_dev_symlinks(dev_path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 fn create_minimal_proc_structure(proc_path: &Path) -> Result<()> {
     let dirs = ["self", "sys", "net"];
     for dir in &dirs {
@@ -599,10 +597,9 @@ fn create_minimal_passwd(rootfs: &Path) -> Result<()> {
     let etc_dir = rootfs.join("etc");
     fs::create_dir_all(&etc_dir)?;
 
-    let passwd_content = "root:x:0:0:root:/:/bin/sh\n";  // Maps UID 0 to "root"
+    let passwd_content = "root:x:0:0:root:/:/bin/sh\n"; // Maps UID 0 to "root"
     fs::write(etc_dir.join("passwd"), passwd_content)?;
     //println!("[Init] Created minimal /etc/passwd for identity resolution");
 
     Ok(())
 }
-

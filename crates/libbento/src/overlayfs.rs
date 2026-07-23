@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use nix::mount::{MsFlags, mount, umount};
 use std::{
-    fs,
     ffi::CString,
+    fs,
     fs::DirBuilder,
     os::unix::fs::DirBuilderExt,
     path::{Path, PathBuf},
@@ -16,39 +16,39 @@ pub struct OverlayPaths {
     pub merged_dir: PathBuf,
 }
 
-pub fn build_overlayfs(container_id : &str) -> Result<OverlayPaths> {
-      println!("\nCreating Overlayfs");
-      let paths = init_overlay_paths(container_id);
-      create_overlay_dirs(&paths).context("Failed to create directories")?;
-      mount_overlay(&paths).context("Failed to mount directories")?;
- //     create_whiteout(&paths.upper_dir).context("Failed to create whiteouts");
- //     create_opaque_dir(&paths.upper_dir).context("Failed to create opaque directory");
-     
-      println!("Successfully created the overlayfs.");
-      Ok(paths)
+pub fn build_overlayfs(container_id: &str) -> Result<OverlayPaths> {
+    println!("\nCreating Overlayfs");
+    let paths = init_overlay_paths(container_id);
+    create_overlay_dirs(&paths).context("Failed to create directories")?;
+    mount_overlay(&paths).context("Failed to mount directories")?;
+    //     create_whiteout(&paths.upper_dir).context("Failed to create whiteouts");
+    //     create_opaque_dir(&paths.upper_dir).context("Failed to create opaque directory");
+
+    println!("Successfully created the overlayfs.");
+    Ok(paths)
 }
 
-
-pub fn clear_overlayfs(paths : OverlayPaths) -> Result<()> {
-      unmount_overlay(&paths.merged_dir).context("Failed to unmount directories")?;
-      Ok(())
+pub fn clear_overlayfs(paths: OverlayPaths) -> Result<()> {
+    unmount_overlay(&paths.merged_dir).context("Failed to unmount directories")?;
+    Ok(())
 }
 
-// Initializing overlay paths 
+// Initializing overlay paths
 pub fn init_overlay_paths(container_id: &str) -> OverlayPaths {
-
-
     let home = std::env::var("HOME").unwrap_or_else(|_| {
         println!("Failed to set environment, exiting...");
         std::process::exit(1);
     });
 
-//    let home = std::env::var("HOME");
+    //    let home = std::env::var("HOME");
     let path = PathBuf::from(format!("{}.local/share/bento/{}", home, container_id));
     println!("\nCreating Overlayfs at : {}", path.display());
 
-    let lower_directory = PathBuf::from(format!("{}.local/share/bento/{}/rootfs", home, container_id));
- 
+    let lower_directory = PathBuf::from(format!(
+        "{}.local/share/bento/{}/rootfs",
+        home, container_id
+    ));
+
     let _ = fs::create_dir_all(&lower_directory).context("Failed to create the lower directory.");
 
     println!("Lower : {}", lower_directory.display());
@@ -65,14 +65,17 @@ pub fn init_overlay_paths(container_id: &str) -> OverlayPaths {
 pub fn create_overlay_dirs(paths: &OverlayPaths) -> Result<()> {
     if !paths.lower_dir.exists() {
         println!("Lower dir does not exist.");
-        return Err(anyhow::anyhow!("Lower directory does not exist: {:?}", paths.lower_dir));
+        return Err(anyhow::anyhow!(
+            "Lower directory does not exist: {:?}",
+            paths.lower_dir
+        ));
     }
     DirBuilder::new()
         .mode(0o755)
         .recursive(true)
         .create(&paths.lower_dir)
         .context("Failed to create lower dir")?;
-    
+
     DirBuilder::new()
         .mode(0o755)
         .recursive(true)
@@ -104,16 +107,22 @@ pub fn mount_overlay(paths: &OverlayPaths) -> Result<()> {
     );
 
     let fstype = CString::new("overlay")?;
-    let target = CString::new(paths.merged_dir.to_str().context("Invalid merged_dir path")?)?;
+    let target = CString::new(
+        paths
+            .merged_dir
+            .to_str()
+            .context("Invalid merged_dir path")?,
+    )?;
     let data = CString::new(options)?;
-   
+
     mount(
         Some(fstype.as_c_str()),
         target.as_c_str(),
         Some(fstype.as_c_str()),
         MsFlags::empty(),
         Some(data.as_c_str()),
-    ).context("Failed to mount overlayfs")?;
+    )
+    .context("Failed to mount overlayfs")?;
 
     Ok(())
 }
@@ -126,7 +135,7 @@ pub fn create_whiteout(upper_dir: &Path, path: &Path) -> Result<()> {
         .context("Path has no file name")?
         .to_str()
         .context("Invalid file name encoding")?;
-    
+
     let whiteout_file = whiteout_path.with_file_name(format!(".wh.{}", file_name));
 
     if let Some(parent) = whiteout_file.parent() {
@@ -149,7 +158,7 @@ pub fn create_whiteout(upper_dir: &Path, path: &Path) -> Result<()> {
 pub fn create_opaque_dir(upper_dir: &Path, path: &Path) -> Result<()> {
     let opaque_dir = upper_dir.join(path);
     fs::create_dir_all(&opaque_dir).context("Failed to create opaque dir parent")?;
-    
+
     let opaque_path = opaque_dir.join(".wh..wh..opq");
     if opaque_path.exists() {
         return Err(anyhow::anyhow!("Opaque marker already exists: {:?}", opaque_path));

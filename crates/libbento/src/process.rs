@@ -1,7 +1,6 @@
 // crates/libbento/src/process.rs
 
 use crate::fs;
-use std::io::Read;
 use crate::overlayfs;
 use crate::syscalls::{
     disable_setgroups_for_child, fork_intermediate, map_user_namespace_rootless,
@@ -14,6 +13,7 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, Pid, fork, getpid, mkfifo, pipe, read, write};
 use serde::{Deserialize, Serialize};
 use std::fs as std_fs;
+use std::io::Read;
 use std::os::unix::io::{AsRawFd, OwnedFd};
 use std::path::{Path, PathBuf};
 
@@ -112,9 +112,7 @@ impl SyncSignal {
     }
 }
 
-
-
-// Seccomp starts from here 
+// Seccomp starts from here
 #[derive(Debug, Clone, Deserialize)]
 pub struct SeccompConfig {
     #[serde(rename = "defaultAction")]
@@ -133,9 +131,7 @@ impl Default for SeccompConfig {
     fn default() -> Self {
         Self {
             default_action: "SCMP_ACT_ALLOW".to_string(),
-            architectures: vec![
-                "SCMP_ARCH_X86_64".to_string(),
-            ],
+            architectures: vec!["SCMP_ARCH_X86_64".to_string()],
             syscalls: Vec::new(),
         }
     }
@@ -166,23 +162,24 @@ impl Default for Config {
         Self {
             root_path: "/tmp/bento-rootfs".to_string(),
 
-	    //args: vec!["/bin/sh".to_string(), "-c".to_string(), "echo '=== Bento.rs Demo: Isolation Showcase ===' && echo 'Kernel Info:' && uname -a && echo 'Hostname:' && hostname && echo 'User Info:' && whoami && id && echo 'Namespace Files:' && ls /proc/self/ns && echo 'UID Mapping:' && cat /proc/self/uid_map && echo 'Process Tree:' && ps aux && echo 'Mount Points:' && cat /proc/mounts && echo 'Environment:' && env && echo '=== End Demo: Functional Container Achieved! ==='".to_string()],
+            //args: vec!["/bin/sh".to_string(), "-c".to_string(), "echo '=== Bento.rs Demo: Isolation Showcase ===' && echo 'Kernel Info:' && uname -a && echo 'Hostname:' && hostname && echo 'User Info:' && whoami && id && echo 'Namespace Files:' && ls /proc/self/ns && echo 'UID Mapping:' && cat /proc/self/uid_map && echo 'Process Tree:' && ps aux && echo 'Mount Points:' && cat /proc/mounts && echo 'Environment:' && env && echo '=== End Demo: Functional Container Achieved! ==='".to_string()],
 
-	/*args: vec!["/bin/sh".to_string(), "-c".to_string(), 
-    "echo '=== Bento.rs Demo: Isolation Showcase ===' && \
-    echo 'Kernel Info:' && uname -a && \
-    echo 'Hostname:' && hostname && \
-    echo 'User Info:' && whoami && id && \
-    echo 'Namespace Files:' && ls /proc/self/ns && \
-    echo 'UID Mapping:' && cat /proc/self/uid_map && \
-    echo 'Process Tree:' && ps aux && \
-    echo 'Mount Points:' && cat /proc/mounts && \
-    echo 'Environment:' && env && \
-    echo '=== End Demo: Functional Container Achieved! ==='".to_string()],
-*/
-
-args: vec!["/bin/sh".to_string(), "-c".to_string(), 
-    "echo '=== Bento.rs Demo: Isolation Showcase ===' && \
+            /*args: vec!["/bin/sh".to_string(), "-c".to_string(),
+                "echo '=== Bento.rs Demo: Isolation Showcase ===' && \
+                echo 'Kernel Info:' && uname -a && \
+                echo 'Hostname:' && hostname && \
+                echo 'User Info:' && whoami && id && \
+                echo 'Namespace Files:' && ls /proc/self/ns && \
+                echo 'UID Mapping:' && cat /proc/self/uid_map && \
+                echo 'Process Tree:' && ps aux && \
+                echo 'Mount Points:' && cat /proc/mounts && \
+                echo 'Environment:' && env && \
+                echo '=== End Demo: Functional Container Achieved! ==='".to_string()],
+            */
+            args: vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "echo '=== Bento.rs Demo: Isolation Showcase ===' && \
     echo -n 'Kernel Info: ' && uname -a && \
     echo -n 'Hostname: ' && hostname && \
     echo -n 'User Info: ' && whoami && echo -n 'ID: ' && id && \
@@ -190,8 +187,9 @@ args: vec!["/bin/sh".to_string(), "-c".to_string(),
     echo -n 'UID Mapping: ' && cat /proc/self/uid_map && \
     echo -n 'Process Tree: ' && ps aux && \
     echo -n 'Mount Points: ' && cat /proc/mounts && \
-    echo '=== End Demo: Functional Container Achieved! ==='".to_string()],
-
+    echo '=== End Demo: Functional Container Achieved! ==='"
+                    .to_string(),
+            ],
 
             //args: vec!["/bin/sh".to_string(), "-c".to_string(), "cat /proc/meminfo | head -5 && echo 'System info accessible'".to_string()],
             //args: vec!["/bin/sh".to_string(), "-c".to_string(), "env | sort && echo 'PATH:' $PATH".to_string()],
@@ -222,13 +220,12 @@ args: vec!["/bin/sh".to_string(), "-c".to_string(),
             rootless: true,
             bundle_path: ".".to_string(),
             container_id: "default".to_string(),
-            population_method: RootfsPopulationMethod::Manual,// NEW: Default to reliable method
+            population_method: RootfsPopulationMethod::Manual, // NEW: Default to reliable method
             use_overlayfs: false,
-            seccomp : SeccompConfig::default(),
+            seccomp: SeccompConfig::default(),
         }
     }
 }
-
 
 // ============================================================================
 // PIPE MANAGEMENT HELPERS (Internal Refactoring)
@@ -437,25 +434,34 @@ fn orchestrator_handler(bridge_pid: Pid, pipes: OrchestratorPipes, config: &Conf
         }
     }*/
 
-match waitpid(bridge_pid, None) {
-    Ok(WaitStatus::Exited(pid, status)) => {
-        println!("[Orchestrator] Bridge {} exited with status {}", pid, status);
-        if status != 0 {
-            return Err(anyhow!("[Orchestrator] Bridge exited with non-zero status {}", status));
+    match waitpid(bridge_pid, None) {
+        Ok(WaitStatus::Exited(pid, status)) => {
+            println!(
+                "[Orchestrator] Bridge {} exited with status {}",
+                pid, status
+            );
+            if status != 0 {
+                return Err(anyhow!(
+                    "[Orchestrator] Bridge exited with non-zero status {}",
+                    status
+                ));
+            }
+        }
+        Err(nix::errno::Errno::ECHILD) => {
+            //  Treat as success: child already reaped
+            println!(
+                "[Orchestrator] Bridge already exited and reaped (ECHILD) - normal for fast exits"
+            );
+        }
+        Err(e) => {
+            return Err(anyhow!("[Orchestrator] Bridge wait failed: {}", e));
+        }
+        _ => {
+            println!("[Orchestrator] Unexpected bridge status");
         }
     }
-    Err(nix::errno::Errno::ECHILD) => {  //  Treat as success: child already reaped
-        println!("[Orchestrator] Bridge already exited and reaped (ECHILD) - normal for fast exits");
-    }
-    Err(e) => {
-        return Err(anyhow!("[Orchestrator] Bridge wait failed: {}", e));
-    }
-    _ => {
-        println!("[Orchestrator] Unexpected bridge status");
-    }
-}
 
-// Ensure the rest of the function proceeds only if no errors occurred earlier
+    // Ensure the rest of the function proceeds only if no errors occurred earlier
     println!(
         "[Orchestrator] Container '{}' created successfully (status: created)",
         config.container_id
@@ -611,11 +617,11 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
     if config.use_overlayfs {
         if let Err(e) = overlayfs::build_overlayfs(&config.container_id) {
             println!("Container id : {}", &config.container_id);
-            eprintln!("[INIT] Failed to setup optional overlayfs : {}",e);
+            eprintln!("[INIT] Failed to setup optional overlayfs : {}", e);
             return 1;
         }
     }
-  
+
     // Phase 5: Enter PAUSE state
     let start_pipe_path = format!("/tmp/bento-start-{}", config.container_id);
     println!("[Init] Container setup complete - entering PAUSE state");
@@ -661,7 +667,6 @@ fn init_handler_with_pause(config: &Config, _start_pipe_fd: i32) -> isize {
 
 // Enhanced start signal reading with complete I/O handling
 fn read_start_signal(pipe_path: &str) -> Result<()> {
-
     println!("[Init] Opening start pipe: {}", pipe_path);
 
     let mut pipe = std::fs::OpenOptions::new()

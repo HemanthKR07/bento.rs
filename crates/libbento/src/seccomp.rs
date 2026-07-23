@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::process::SeccompConfig;
+use anyhow::{Context, Result};
 use libseccomp::{ScmpAction, ScmpArch, ScmpFilterContext, ScmpSyscall};
 
 /*
