@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand, ValueHint};
-use libbento::process::{Config, RootfsPopulationMethod, create_container, start_container};
+use libbento::process::{Config, RootfsPopulationMethod, create_container, start_container, SeccompConfig};
 use log::info;
 use std::path::PathBuf;
 
@@ -80,6 +80,7 @@ fn main() {
                     _ => RootfsPopulationMethod::BusyBox, // Clear default handling
                 },
                 use_overlayfs: overlayfs,
+                seccomp: SeccompConfig::default(),
                 ..Config::default() // Use default for remaining fields
             };
             match create_container(&config) {

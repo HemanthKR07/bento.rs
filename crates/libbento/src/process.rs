@@ -17,7 +17,6 @@ use std::fs as std_fs;
 use std::os::unix::io::{AsRawFd, OwnedFd};
 use std::path::{Path, PathBuf};
 
-// NEW: Add the RootfsPopulationMethod enum
 #[derive(Debug, Clone)]
 pub enum RootfsPopulationMethod {
     Manual,
@@ -113,7 +112,42 @@ impl SyncSignal {
     }
 }
 
+
+
+// Seccomp starts from here 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SeccompConfig {
+    #[serde(rename = "defaultAction")]
+    pub default_action: String, // this is for unspecified syscalls
+    pub architectures: Vec<String>,
+    pub syscalls: Vec<SyscallRule>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SyscallRule {
+    pub names: Vec<String>,
+    pub action: String, // like Allow and Kill actions
+}
+
+impl Default for SeccompConfig {
+    fn default() -> Self {
+        Self {
+            default_action: "SCMP_ACT_ALLOW".to_string(),
+            architectures: vec![
+                "SCMP_ARCH_X86_64".to_string(),
+            ],
+            syscalls: Vec::new(),
+        }
+    }
+}
+
+// this holds the configurations from seccompConfig, which defines the filtering rules.
+pub struct SeccompFilter {
+    config: SeccompConfig,
+}
+
 // UPDATED: Add population_method field to Config
+#[allow(unused_imports)]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub root_path: String,
@@ -122,8 +156,9 @@ pub struct Config {
     pub rootless: bool,
     pub bundle_path: String,
     pub container_id: String,
-    pub population_method: RootfsPopulationMethod, // NEW: Add this field
+    pub population_method: RootfsPopulationMethod,
     pub use_overlayfs: bool,
+    pub seccomp: SeccompConfig,
 }
 
 impl Default for Config {
@@ -189,9 +224,11 @@ args: vec!["/bin/sh".to_string(), "-c".to_string(),
             container_id: "default".to_string(),
             population_method: RootfsPopulationMethod::Manual,// NEW: Default to reliable method
             use_overlayfs: false,
+            seccomp : SeccompConfig::default(),
         }
     }
 }
+
 
 // ============================================================================
 // PIPE MANAGEMENT HELPERS (Internal Refactoring)

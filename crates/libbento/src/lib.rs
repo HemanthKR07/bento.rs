@@ -2,3 +2,4 @@ pub mod fs;
 pub mod process;
 pub mod syscalls;
 pub mod overlayfs;
+pub mod seccomp;
